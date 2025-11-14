@@ -1,0 +1,31 @@
+[tool.poetry]
+name = "auto-dataset-builder"
+version = "0.1.0"
+description = "A modular framework for building multimodal datasets."
+authors = ["Manus AI"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+# Core Data Handling
+requests = "^2.31.0"
+boto3 = "^1.33.12"
+psycopg2-binary = "^2.9.9"
+# Preprocessing
+Pillow = "^10.1.0"
+imagehash = "^4.3.1"
+# ML Frameworks
+torch = {version = "^2.1.2", optional = true}
+# Labeling
+pandas = "^2.1.4"
+snorkel = "^0.9.8"
+# Sharding
+webdataset = "^0.2.65"
+# Other utilities
+python-dotenv = "^1.0.0"
+botocore = "^1.33.12"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
