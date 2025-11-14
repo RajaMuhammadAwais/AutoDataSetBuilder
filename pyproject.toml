@@ -2,7 +2,7 @@
 name = "auto-dataset-builder"
 version = "0.1.0"
 description = "A modular framework for building multimodal datasets."
-authors = ["Manus AI"]
+authors = ["Raja Muhammad Awais"]
 license = "MIT"
 readme = "README.md"
 
