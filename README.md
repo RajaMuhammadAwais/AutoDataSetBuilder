@@ -454,7 +454,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - **Issues & Bugs:** [GitHub Issues](https://github.com/rajamuhammadawais1/AutoDataSetBuilder/issues)
 - **Discussions:** [GitHub Discussions](https://github.com/rajamuhammadawais1/AutoDataSetBuilder/discussions)
-- **Email:** support@example.com
+- **Email:** 
 
 ---
 
