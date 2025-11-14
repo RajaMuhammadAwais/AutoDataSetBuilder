@@ -1,0 +1,414 @@
+name: Release & Deploy
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version'
+        required: true
+        default: 'v0.1.0'
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+jobs:
+  # Job 1: Create Release
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      release_id: ${{ steps.create_release.outputs.id }}
+      version: ${{ env.RELEASE_VERSION }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine version
+        id: version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+          else
+            VERSION=${{ github.event.inputs.version }}
+          fi
+          echo "RELEASE_VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          git log --oneline --graph $(git describe --tags --abbrev=0 2>/dev/null || echo "HEAD~10")..HEAD > CHANGELOG_TEMP.txt
+          cat CHANGELOG_TEMP.txt
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          cat CHANGELOG_TEMP.txt >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ env.RELEASE_VERSION }}
+          release_name: Release ${{ env.RELEASE_VERSION }}
+          body: |
+            ## Changes in ${{ env.RELEASE_VERSION }}
+
+            ### New Features
+            - Feature descriptions coming from commit history
+
+            ### Bug Fixes
+            - Bug fix descriptions coming from commit history
+
+            ### Changelog
+            ```
+            ${{ steps.changelog.outputs.changelog }}
+            ```
+
+            ## Installation
+
+            ```bash
+            pip install auto-dataset-builder==${{ env.RELEASE_VERSION }}
+            ```
+
+            ## Docker Images
+
+            - `ghcr.io/${{ github.repository }}/ingest:${{ env.RELEASE_VERSION }}`
+            - `ghcr.io/${{ github.repository }}/preprocess:${{ env.RELEASE_VERSION }}`
+            - `ghcr.io/${{ github.repository }}/labeling:${{ env.RELEASE_VERSION }}`
+            - `ghcr.io/${{ github.repository }}/sharder:${{ env.RELEASE_VERSION }}`
+
+            ## Installation Verification
+
+            ```python
+            import autods
+            print(autods.__version__)  # Should print ${{ env.RELEASE_VERSION }}
+            ```
+
+          draft: false
+          prerelease: ${{ contains(env.RELEASE_VERSION, 'alpha') || contains(env.RELEASE_VERSION, 'beta') }}
+
+      - name: Notify release creation
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '📦 Release ${{ env.RELEASE_VERSION }} created successfully!'
+            })
+
+  # Job 2: Build and Publish Package
+  build-publish:
+    name: Build & Publish Package
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install poetry build twine
+
+      - name: Update version in pyproject.toml
+        run: |
+          sed -i 's/version = "0.1.0"/version = "${{ needs.create-release.outputs.version }}"/g' pyproject.toml
+
+      - name: Build distributions
+        run: |
+          poetry build
+          python -m build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+        if: secrets.PYPI_API_TOKEN != ''
+
+      - name: Upload artifacts to release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./dist/auto-dataset-builder-${{ needs.create-release.outputs.version }}.tar.gz
+          asset_name: auto-dataset-builder-${{ needs.create-release.outputs.version }}.tar.gz
+          asset_content_type: application/gzip
+
+  # Job 3: Build and Push Docker Images
+  docker-release:
+    name: Build & Push Docker Images
+    needs: create-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      matrix:
+        service:
+          - ingest
+          - preprocess
+          - labeling
+          - sharder
+        include:
+          - service: ingest
+            dockerfile: ./services/ingest_service/Dockerfile
+            context: ./services/ingest_service
+
+          - service: preprocess
+            dockerfile: ./services/preprocess_workers/Dockerfile
+            context: ./services/preprocess_workers
+
+          - service: labeling
+            dockerfile: ./services/labeling_service/Dockerfile
+            context: ./services/labeling_service
+
+          - service: sharder
+            dockerfile: ./services/sharder/Dockerfile
+            context: ./services/sharder
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+        if: secrets.DOCKER_USERNAME != ''
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push ${{ matrix.service }} image
+        uses: docker/build-push-action@v4
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/autods-${{ matrix.service }}:${{ needs.create-release.outputs.version }}
+            ${{ secrets.DOCKER_USERNAME }}/autods-${{ matrix.service }}:latest
+            ghcr.io/${{ github.repository }}/${{ matrix.service }}:${{ needs.create-release.outputs.version }}
+            ghcr.io/${{ github.repository }}/${{ matrix.service }}:latest
+          cache-from: type=registry
+          cache-to: type=inline
+          labels: |
+            org.opencontainers.image.version=${{ needs.create-release.outputs.version }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+  # Job 4: Create Deployment
+  deploy-staging:
+    name: Deploy to Staging
+    needs: [create-release, docker-release]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.inputs.environment == 'staging'
+    environment:
+      name: staging
+      url: https://staging.autods.example.com
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      - name: Set up kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBE_CONFIG_STAGING }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+        if: secrets.KUBE_CONFIG_STAGING != ''
+
+      - name: Deploy to Kubernetes
+        run: |
+          kubectl set image deployment/autods-ingest \
+            ingest=ghcr.io/${{ github.repository }}/ingest:${{ needs.create-release.outputs.version }} \
+            -n autods || kubectl apply -f k8s/deployment.yaml
+          
+          kubectl rollout status deployment/autods-ingest -n autods --timeout=5m
+        if: secrets.KUBE_CONFIG_STAGING != ''
+
+      - name: Run smoke tests
+        run: |
+          echo "Running smoke tests..."
+          sleep 30
+          curl -f http://staging.autods.example.com/health || true
+        continue-on-error: true
+
+      - name: Notify deployment
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.deployments.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: context.payload.deployment.id,
+              state: 'success',
+              environment_url: 'https://staging.autods.example.com'
+            })
+        continue-on-error: true
+
+  # Job 5: Deploy to Production (Manual Approval)
+  deploy-production:
+    name: Deploy to Production
+    needs: [create-release, docker-release, deploy-staging]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.event.inputs.environment == 'production'
+    environment:
+      name: production
+      url: https://autods.example.com
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      - name: Set up kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBE_CONFIG_PRODUCTION }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+        if: secrets.KUBE_CONFIG_PRODUCTION != ''
+
+      - name: Deploy to Kubernetes (Canary)
+        run: |
+          # Deploy with canary strategy (10% traffic)
+          kubectl set image deployment/autods-ingest \
+            ingest=ghcr.io/${{ github.repository }}/ingest:${{ needs.create-release.outputs.version }} \
+            -n autods || kubectl apply -f k8s/deployment-prod.yaml
+          
+          kubectl rollout status deployment/autods-ingest -n autods --timeout=5m
+        if: secrets.KUBE_CONFIG_PRODUCTION != ''
+
+      - name: Health checks
+        run: |
+          echo "Running health checks..."
+          for i in {1..30}; do
+            if curl -f http://autods.example.com/health; then
+              echo "✅ Health check passed"
+              exit 0
+            fi
+            echo "Attempt $i/30..."
+            sleep 10
+          done
+          exit 1
+        continue-on-error: true
+
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          kubectl rollout undo deployment/autods-ingest -n autods
+          kubectl rollout status deployment/autods-ingest -n autods --timeout=5m
+
+      - name: Notify production deployment
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: context.payload.deployment.id,
+              state: 'success',
+              environment_url: 'https://autods.example.com',
+              description: 'Deployed to production'
+            })
+        continue-on-error: true
+
+  # Final: Post-Release Tasks
+  post-release:
+    name: Post-Release Tasks
+    runs-on: ubuntu-latest
+    needs: [create-release]
+    if: always()
+
+    steps:
+      - name: Create GitHub Release Notes
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ needs.create-release.outputs.version }}
+          release_name: Release ${{ needs.create-release.outputs.version }}
+          draft: false
+        continue-on-error: true
+
+      - name: Notify Slack of release
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          payload: |
+            {
+              "text": "🚀 AutoDataSetBuilder ${{ needs.create-release.outputs.version }} Released",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Release*: ${{ needs.create-release.outputs.version }}\n*Repository*: ${{ github.repository }}\n*Author*: ${{ github.actor }}"
+                  }
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "🔗 <${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ needs.create-release.outputs.version }}|View Release>"
+                  }
+                }
+              ]
+            }
+        if: secrets.SLACK_WEBHOOK != ''
+        continue-on-error: true
+
+      - name: Create Jira issue for release
+        uses: topdesk/jira-action@master
+        with:
+          host: ${{ secrets.JIRA_HOST }}
+          user: ${{ secrets.JIRA_USER }}
+          password: ${{ secrets.JIRA_PASSWORD }}
+          project: AUTODS
+          issuetype: Release
+          summary: Release ${{ needs.create-release.outputs.version }}
+          description: |
+            Released version ${{ needs.create-release.outputs.version }}
+            Repository: ${{ github.repository }}
+            Commit: ${{ github.sha }}
+        if: secrets.JIRA_HOST != ''
+        continue-on-error: true

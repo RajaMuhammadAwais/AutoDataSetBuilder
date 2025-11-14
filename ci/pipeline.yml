@@ -1,0 +1,15 @@
+# This file has been replaced with GitHub Actions workflows
+# See .github/workflows/ for the CI/CD configuration
+
+# GitHub Actions Workflows:
+# - ci.yml: Continuous Integration pipeline
+# - release.yml: Release and deployment pipeline
+# - security.yml: Security and dependency checks
+
+# The workflows include:
+# - Linting and code quality checks
+# - Unit and integration tests
+# - Docker image building
+# - Security scanning
+# - Automated deployment
+# - Release management
