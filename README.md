@@ -43,6 +43,10 @@ AutoDataSetBuilder is an end-to-end framework designed to simplify the process o
 
 ---
 
+## Architecture
+<img width="3120" height="4720" alt="architecture" src="https://github.com/user-attachments/assets/f1fed24e-63cc-49fb-87d9-4c70f7007227" />
+
+
 ## ✨ Key Features
 
 - **🔌 Modular Architecture** - Independent, composable components that work together seamlessly
