@@ -1,35 +1,470 @@
-## AutoDataSetBuilder 🚀
+# AutoDataSetBuilder
 
 <div align="center">
 
 [![Python Version](https://img.shields.io/badge/Python-3.10%2B-blue?style=flat-square&logo=python)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 [![Docker Compose](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker)](https://www.docker.com/)
-[![GitHub Workflow Status](https://img.shields.io/badge/CI%2FCD-GitHub%20Actions-2088FF?style=flat-square&logo=github-actions)](/.github/workflows/)
-[![Code Quality](https://img.shields.io/badge/Code%20Quality-A-brightgreen?style=flat-square)](https://www.python.org/)
-[![Maintenance](https://img.shields.io/badge/Maintained%3F-Yes-brightgreen?style=flat-square)](https://github.com/rajamuhammadawais1/AutoDataSetBuilder)
+[![Code Quality](https://img.shields.io/badge/Code%20Quality-Lint%20%2F%20Type-blue?style=flat-square)](.github/workflows/)
+[![Tests](https://img.shields.io/badge/Tests-Unit%20%2F%20Integration-green?style=flat-square)](.github/workflows/)
+[![Maintenance](https://img.shields.io/badge/Maintained-Yes-brightgreen?style=flat-square)](https://github.com/rajamuhammadawais1/AutoDataSetBuilder)
 
-**A modular, production-ready framework for building high-quality multimodal datasets at scale**
+**Build high-quality multimodal datasets at scale with an intuitive, modular Python framework**
 
-[Documentation](#-documentation) • [Quick Start](#-quick-start) • [Architecture](#-architecture) • [Contributing](#-contributing)
+[About](#about) • [Getting Started](#getting-started) • [Usage](#usage) • [Architecture](#architecture) • [Contributing](#contributing) • [Docs](#documentation)
 
 </div>
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 
-- [Overview](#-overview)
-- [Key Features](#-key-features)
-- [Architecture](#-architecture)
-- [Quick Start](#-quick-start)
-- [Project Structure](#-project-structure)
-- [Components](#-components)
-- [Documentation](#-documentation)
-- [Contributing](#-contributing)
-- [License](#-license)
+- [About](#about)
+- [Key Features](#key-features)
+- [Getting Started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+  - [Configuration](#configuration)
+- [Usage](#usage)
+  - [Example 1: Python SDK](#example-1-ingesting-and-preprocessing-data-with-the-python-sdk)
+  - [Example 2: Running Services](#example-2-running-services-with-docker-compose)
+  - [Example 3: Airflow DAGs](#example-3-orchestrating-with-airflow-dags)
+- [Architecture](#architecture)
+- [Contributing](#contributing)
+- [Documentation](#documentation)
+- [License](#license)
 
 ---
+
+## About
+
+**AutoDataSetBuilder** is a production-ready framework for building, processing, and managing multimodal datasets. Whether you're an ML researcher, data engineer, or team building data pipelines, AutoDataSetBuilder provides:
+
+- **Modular Components**: Ingest, preprocess, label, and shard data independently or as a unified pipeline
+- **Multimodal Support**: Handle images, text, audio, and mixed-modality datasets seamlessly
+- **Scalable Architecture**: From local development to cloud deployments with Kubernetes
+- **Developer-Friendly SDK**: Pure Python API with clear, documented classes and functions
+- **Production-Ready**: Error handling, monitoring, metrics, and orchestration built-in
+- **Extensible Design**: Add custom labeling functions, preprocessing steps, and data sources
+
+### High-Level Mission
+
+AutoDataSetBuilder aims to **democratize dataset creation** by providing:
+1. A clear, well-documented pipeline from raw data to training-ready shards
+2. Flexible, composable components for different use cases
+3. Production infrastructure (monitoring, error handling, scalability) without the complexity
+4. A shared ecosystem for dataset builders to collaborate
+
+---
+
+## Key Features
+
+| Feature | Description |
+|---------|-------------|
+| 🔌 **Modular SDK** | Ingest, preprocess, label, and shard independently or together |
+| 📊 **Multimodal** | Native support for images, text, audio, and custom data types |
+| 🏷️ **Intelligent Labeling** | Snorkel weak supervision with label models and aggregation |
+| ⚡ **Scalable Processing** | Distributed preprocessing workers, parallel API calls, batch operations |
+| 🗄️ **Efficient Sharding** | WebDataset-compatible TAR shards optimized for training |
+| 🐳 **Docker & Compose** | Fully containerized local dev environment, multi-service orchestration |
+| 🔄 **Airflow Integration** | Production-grade DAGs with retries, monitoring, and failure notifications |
+| 📈 **Human-in-the-Loop** | Label Studio integration for interactive data annotation |
+| ☁️ **Cloud Native** | S3-compatible storage (MinIO), Kubernetes-ready, multi-cloud support |
+| 🔐 **Secure** | Environment-based secrets, no hardcoded credentials, audit logging |
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- **Python**: 3.10 or later
+- **Docker & Docker Compose**: For running services locally
+- **Git**: For cloning the repository
+- **Poetry** (optional): For dependency management
+
+### Installation
+
+#### Option 1: Using Docker Compose (Recommended for Quick Start)
+
+1. Clone the repository:
+```bash
+git clone https://github.com/rajamuhammadawais1/AutoDataSetBuilder.git
+cd AutoDataSetBuilder
+```
+
+2. Start all services:
+```bash
+docker-compose up -d
+```
+
+3. Verify services are running:
+```bash
+docker-compose ps
+# Expected output:
+# NAME              SERVICE                    STATUS
+# autods-minio      minio                      Up
+# autods-postgres   postgres                   Up
+# autods-label-studio  label-studio            Up
+```
+
+4. Access services:
+- **MinIO Console**: http://localhost:9001 (user: `minioadmin`, password: `minioadmin`)
+- **Label Studio**: http://localhost:8080
+- **PostgreSQL**: `postgresql://autods_user:autods_password@localhost:5432/autods_db`
+
+#### Option 2: Using pip (For SDK Only)
+
+```bash
+# Install from source
+pip install -e .
+
+# Or install from PyPI (when available)
+pip install auto-dataset-builder
+```
+
+#### Option 3: Using Poetry (For Development)
+
+```bash
+# Install Poetry
+curl -sSL https://install.python-poetry.org | python3 -
+
+# Install dependencies
+poetry install
+
+# Activate virtual environment
+poetry shell
+```
+
+### Configuration
+
+Set environment variables before running (or create a `.env` file):
+
+```bash
+# S3/MinIO Configuration
+export S3_ENDPOINT_URL="http://localhost:9000"
+export MINIO_ROOT_USER="minioadmin"
+export MINIO_ROOT_PASSWORD="minioadmin"
+
+# Database Configuration
+export DB_URL="postgresql://autods_user:autods_password@localhost:5432/autods_db"
+
+# Data Buckets
+export RAW_BUCKET="raw"
+export PROCESSED_BUCKET="processed"
+export SHARDS_BUCKET="shards"
+
+# Optional: Airflow Configuration
+export AIRFLOW_HOME="/workspace/infra/airflow"
+export AIRFLOW__CORE__EXECUTOR="LocalExecutor"
+
+# Optional: Slack Notifications
+export SLACK_WEBHOOK_URL="https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+```
+
+Create a `.env` file in the project root:
+```bash
+cp .env.example .env
+# Edit .env with your values
+```
+
+---
+
+## Usage
+
+### Example 1: Ingesting and Preprocessing Data with the Python SDK
+
+Ingest images from URLs and extract features:
+
+```python
+from autods.ingest import IngestClient
+from autods.preprocess import preprocess_asset
+import boto3
+import os
+
+# Initialize the ingest client
+ingest_client = IngestClient(
+    s3_bucket="raw",
+    db_url=os.getenv("DB_URL")
+)
+
+# Ingest a sample image
+result = ingest_client.ingest_url(
+    url="https://example.com/image.jpg",
+    license="cc0",
+    source="example"
+)
+
+print(f"Ingested asset: {result}")
+# Output: {'id': 'uuid', 's3_key': 'raw/abc123...', 'checksum': 'sha256...'}
+
+# Retrieve and preprocess the asset
+s3 = boto3.client(
+    's3',
+    endpoint_url=os.getenv("S3_ENDPOINT_URL"),
+    aws_access_key_id=os.getenv("MINIO_ROOT_USER"),
+    aws_secret_access_key=os.getenv("MINIO_ROOT_PASSWORD")
+)
+
+obj = s3.get_object(Bucket="raw", Key=result['s3_key'])
+asset_bytes = obj['Body'].read()
+
+features = preprocess_asset(
+    asset_id=result['id'],
+    asset_bytes=asset_bytes,
+    modality='image'
+)
+
+print(f"Features extracted: {features}")
+# Output: {'asset_id': 'uuid', 'phash': 'abc123...', 'clip_embedding': [...]}
+
+ingest_client.close()
+```
+
+### Example 2: Running Services with Docker Compose
+
+Process a dataset using containerized microservices:
+
+```bash
+# 1. Start all services
+docker-compose up -d
+
+# 2. Initialize the database
+docker exec autods-postgres psql -U autods_user -d autods_db -c \
+  "CREATE TABLE IF NOT EXISTS assets (
+    id UUID PRIMARY KEY,
+    source_url TEXT,
+    s3_key TEXT UNIQUE,
+    checksum TEXT UNIQUE,
+    license TEXT,
+    source TEXT,
+    created_at TIMESTAMP
+  );"
+
+# 3. Run the ingest service (example)
+docker-compose exec ingest-service python app.py
+
+# 4. Monitor processing
+docker-compose logs -f preprocess-service
+
+# 5. View results in Label Studio
+open http://localhost:8080
+```
+
+### Example 3: Orchestrating with Airflow DAGs
+
+Schedule a complete pipeline with Airflow:
+
+```bash
+# 1. Initialize Airflow
+export AIRFLOW_HOME=$(pwd)/infra/airflow
+airflow db init
+
+# 2. Create an admin user
+airflow users create \
+  --username admin \
+  --firstname Admin \
+  --lastname User \
+  --role Admin \
+  --email admin@example.com
+
+# 3. Start Airflow web server and scheduler
+airflow webserver -p 8080 &
+airflow scheduler &
+
+# 4. Access the UI
+open http://localhost:8080
+
+# 5. Trigger the auto_dataset_dag
+airflow dags trigger auto_dataset_dag
+
+# 6. Monitor execution
+airflow dags list-runs --dag-id auto_dataset_dag
+```
+
+For more examples, see the [examples/](examples/) folder.
+
+---
+
+## Architecture
+
+### System Overview
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                     CLIENT LAYER                         │
+│  Python SDK • REST APIs • Airflow DAGs • CLI Tools      │
+└──────────────────┬──────────────────────────────────────┘
+                   │
+┌──────────────────▼──────────────────────────────────────┐
+│                    SERVICE LAYER                         │
+│                                                          │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
+│  │   INGEST     │  │  PREPROCESS  │  │   LABELING   │  │
+│  │   SERVICE    │  │   WORKERS    │  │   SERVICE    │  │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  │
+│         │                 │                  │          │
+│         └─────────────────┴──────────────────┘          │
+│                     │                                    │
+│         ┌───────────▼────────────┐                      │
+│         │   SHARED SDK CORE      │                      │
+│         │  (autods package)      │                      │
+│         │  - ingest              │                      │
+│         │  - preprocess          │                      │
+│         │  - labeling            │                      │
+│         │  - shard               │                      │
+│         └───────────┬────────────┘                      │
+│                     │                                    │
+└──────────────────┬──────────────────────────────────────┘
+                   │
+┌──────────────────▼──────────────────────────────────────┐
+│                  DATA & METADATA LAYER                   │
+│                                                          │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
+│  │    MinIO     │  │  PostgreSQL  │  │Label Studio  │  │
+│  │ (S3-like)    │  │  (Metadata)  │  │ (Interactive)│  │
+│  │Object Store  │  │              │  │ Labeling    │  │
+│  └──────────────┘  └──────────────┘  └──────────────┘  │
+│                                                          │
+│  ┌──────────────┐  ┌──────────────┐                    │
+│  │ Prometheus   │  │   Grafana    │                    │
+│  │ (Metrics)    │  │(Dashboards)  │                    │
+│  └──────────────┘  └──────────────┘                    │
+│                                                          │
+└──────────────────────────────────────────────────────────┘
+```
+
+### Data Pipeline Flow
+
+```
+Raw Data Sources (URLs, APIs, Files)
+           │
+           ▼
+┌──────────────────────┐
+│  INGEST SERVICE      │
+│  - Fetch data        │
+│  - Validate format   │
+│  - Upload to S3      │
+│  - Record metadata   │
+└─────────┬────────────┘
+          │
+          ▼
+┌──────────────────────┐
+│ PREPROCESS WORKERS   │
+│  - Extract features  │
+│  - Compute hashes    │
+│  - Embeddings        │
+│  - Deduplication     │
+└─────────┬────────────┘
+          │
+          ▼
+┌──────────────────────┐
+│  LABELING SERVICE    │
+│  - Apply LFs         │
+│  - Aggregate labels  │
+│  - Probabilistic     │
+│  - Quality metrics   │
+└─────────┬────────────┘
+          │
+          ▼
+┌──────────────────────┐
+│   SHARDING SERVICE   │
+│  - Group samples     │
+│  - Create TAR shards │
+│  - Compute indices   │
+│  - Distribution      │
+└─────────┬────────────┘
+          │
+          ▼
+Training-Ready Dataset
+(TAR shards on S3)
+```
+
+### Key Components
+
+- **Ingest Service**: Downloads and validates raw data, stores in S3, records metadata
+- **Preprocess Workers**: Parallel feature extraction (pHash, CLIP embeddings, deduplication)
+- **Labeling Service**: Weak labeling with Snorkel, probabilistic label aggregation
+- **Sharding Service**: Creates WebDataset-compatible TAR shards for efficient training
+- **Airflow Orchestration**: Schedules and monitors the entire pipeline with retries and error handling
+- **MinIO**: S3-compatible object storage for raw, processed, and shard data
+- **PostgreSQL**: Stores asset metadata, labels, and pipeline state
+- **Label Studio**: Human-in-the-loop annotation interface for data review and correction
+
+For detailed architecture information, see [docs/architecture.md](docs/architecture.md).
+
+---
+
+## Contributing
+
+We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for:
+
+- Code of conduct and guidelines
+- Development setup instructions
+- Coding conventions and style guide
+- Testing requirements
+- Pull request process
+- Issue reporting guidelines
+
+Quick start for contributors:
+
+```bash
+# 1. Fork and clone
+git clone https://github.com/YOUR_USERNAME/AutoDataSetBuilder.git
+cd AutoDataSetBuilder
+
+# 2. Create a branch
+git checkout -b feature/your-feature-name
+
+# 3. Install dev dependencies
+poetry install
+
+# 4. Run tests
+pytest tests/
+
+# 5. Run linting
+black sdk/ services/ tests/
+flake8 sdk/ services/ tests/
+mypy sdk/ services/
+
+# 6. Commit and push
+git push origin feature/your-feature-name
+
+# 7. Create a pull request
+```
+
+---
+
+## Documentation
+
+- **[README.md](README.md)** - This file (project overview and quick start)
+- **[docs/architecture.md](docs/architecture.md)** - Detailed system architecture, components, and design patterns
+- **[docs/deployment.md](docs/deployment.md)** - Deployment guides (Docker, Kubernetes, cloud platforms)
+- **[docs/api/](docs/api/)** - SDK API documentation (generated with Sphinx)
+- **[examples/](examples/)** - Runnable example scripts and tutorials
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** - Contributing guidelines and development setup
+
+### API Documentation
+
+To generate API documentation:
+
+```bash
+# Install Sphinx
+pip install sphinx sphinx-rtd-theme sphinx-autodoc-typehints
+
+# Generate HTML docs
+cd docs
+sphinx-build -b html -a . _build/html
+
+# View docs
+open _build/html/index.html
+```
+
+---
+
+## License
+
+This project is licensed under the MIT License - see [LICENSE](LICENSE) file for details.
 
 ## 🎯 Overview
 
