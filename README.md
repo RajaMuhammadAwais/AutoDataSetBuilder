@@ -1,4 +1,4 @@
-<img width="3120" height="4720" alt="architecture" src="https://github.com/user-attachments/assets/53797524-54e4-43e3-bff2-ee77f1f6657e" /># AutoDataSetBuilder 🚀
+ /># AutoDataSetBuilder 🚀
 
 <div align="center">
 
